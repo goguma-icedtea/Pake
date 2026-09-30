@@ -1,0 +1,64 @@
+name: Build Pake App (Windows ARM64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: '패키징할 웹사이트 URL'
+        required: true
+        default: 'https://github.com'
+      name:
+        description: '앱 이름 (영문 권장, 특수문자/공백 주의)'
+        required: true
+        default: 'MyGitHubApp'
+      icon:
+        description: '앱 아이콘 이미지 URL (.ico 또는 .png - 선택)'
+        required: false
+        default: ''
+
+jobs:
+  build-arm64:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Rust & Add ARM64 Target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+
+      # 첫 빌드 이후 반복 빌드 속도를 15분 -> 3분대로 단축해줍니다.
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ runner.os }}-cargo-arm64
+
+      - name: Install Pake CLI
+        run: npm install -g pake-cli
+
+      - name: Build Windows ARM64 App
+        shell: bash
+        run: |
+          CMD="pake \"${{ inputs.url }}\" --name \"${{ inputs.name }}\" --targets arm64"
+          if [ -n "${{ inputs.icon }}" ]; then
+            CMD="$CMD --icon \"${{ inputs.icon }}\""
+          fi
+          echo "실행 명령어: $CMD"
+          eval $CMD
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.name }}-Windows-ARM64
+          path: |
+            *.exe
+            *.msi
+            dist/*.msi
+            dist/*.exe
