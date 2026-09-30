@@ -6,11 +6,11 @@ on:
       url:
         description: '패키징할 웹사이트 URL'
         required: true
-        default: 'https://github.com'
+        default: 'https://notion.so'
       name:
-        description: '앱 이름 (영문 권장, 특수문자/공백 주의)'
+        description: '앱 이름 (영문)'
         required: true
-        default: 'MyGitHubApp'
+        default: 'Notion'
       icon:
         description: '앱 아이콘 이미지 URL (.ico 또는 .png - 선택)'
         required: false
@@ -34,7 +34,6 @@ jobs:
         with:
           targets: aarch64-pc-windows-msvc
 
-      # 첫 빌드 이후 반복 빌드 속도를 15분 -> 3분대로 단축해줍니다.
       - name: Cache Cargo Dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -43,22 +42,31 @@ jobs:
       - name: Install Pake CLI
         run: npm install -g pake-cli
 
+      # Pake CLI 자체의 복사 버그(exit code 3)를 무시하고 넘어갑니다.
       - name: Build Windows ARM64 App
         shell: bash
+        continue-on-error: true
         run: |
           CMD="pake \"${{ inputs.url }}\" --name \"${{ inputs.name }}\" --targets arm64"
           if [ -n "${{ inputs.icon }}" ]; then
             CMD="$CMD --icon \"${{ inputs.icon }}\""
           fi
-          echo "실행 명령어: $CMD"
+          echo "실행: $CMD"
           eval $CMD
 
+      # 실제 빌드된 .msi 와 .exe 파일을 찾아 output 폴더로 복사합니다.
+      - name: Copy Built Artifacts
+        shell: bash
+        run: |
+          mkdir -p output
+          find /c/npm/prefix/node_modules/pake-cli/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/msi/ -name "*.msi" -exec cp {} output/ \; 2>/dev/null || true
+          find /c/npm/prefix/node_modules/pake-cli/src-tauri/target/aarch64-pc-windows-msvc/release/ -maxdepth 1 -name "*.exe" -exec cp {} output/ \; 2>/dev/null || true
+          echo "=== 추출된 파일 목록 ==="
+          ls -la output/
+
+      # output 폴더의 결과물을 다운로드할 수 있게 업로드합니다.
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.name }}-Windows-ARM64
-          path: |
-            *.exe
-            *.msi
-            dist/*.msi
-            dist/*.exe
+          path: output/*
